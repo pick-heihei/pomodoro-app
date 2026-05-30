@@ -601,4 +601,267 @@ class PomodoroApp:
     def _toggle_always_on_top(self):
         self.root.attributes('-topmost', self.always_on_top.get())
 
-    # =====
+    # ============================================================
+    # 事件绑定
+    # ============================================================
+    def _setup_bindings(self):
+        self.root.bind('<space>', lambda e: self._toggle_timer())
+        self.root.bind('<Key-r>', lambda e: self._reset() if not e.state & 0x4 else None)
+        self.root.bind('<Key-s>', lambda e: self._skip() if not e.state & 0x4 else None)
+        self.root.bind('<Key-1>', lambda e: self._switch_mode('work') if not e.state & 0x4 else None)
+        self.root.bind('<Key-2>', lambda e: self._switch_mode('shortBreak') if not e.state & 0x4 else None)
+        self.root.bind('<Key-3>', lambda e: self._switch_mode('longBreak') if not e.state & 0x4 else None)
+        self.root.bind('<Escape>', lambda e: self._on_close())
+
+    # ============================================================
+    # 定时器逻辑
+    # ============================================================
+    def _toggle_timer(self):
+        if self.running:
+            self._pause()
+        else:
+            self._start()
+
+    def _start(self):
+        if self.time_left <= 0:
+            self.time_left = self._get_current_duration()
+            self.total_time = self.time_left
+        self.running = True
+        self._update_control_states()
+        self._tick()
+
+    def _pause(self):
+        self.running = False
+        self._update_control_states()
+
+    def _reset(self):
+        self.running = False
+        self.time_left = self._get_current_duration()
+        self.total_time = self.time_left
+        self._update_ui()
+        self._update_control_states()
+
+    def _skip(self):
+        self.running = False
+        self.time_left = 0
+        self._timer_complete()
+
+    def _tick(self):
+        if not self.running:
+            return
+        if self.time_left > 0:
+            self.time_left -= 1
+            if self.time_left <= 5 and self.time_left > 0 and self.mode == 'work':
+                self._play_tick()
+            self._update_ui()
+            self.root.after(1000, self._tick)
+        else:
+            self.running = False
+            self._timer_complete()
+
+    def _timer_complete(self):
+        self.running = False
+
+        if self.mode == 'work':
+            self.pomo_count += 1
+            self.total_focus_min += self.settings['work']
+            self._notify("Pomodoro Complete!",
+                        f"{self.pomo_count} pomodoros, {self._format_focus_total()} total focus")
+            hwnd = get_hwnd(self.root)
+            flash_window(hwnd, 8)
+            bring_to_front(hwnd)
+            self._play_done_work()
+            if self.pomo_count % self.settings['longInterval'] == 0:
+                self.mode = 'longBreak'
+            else:
+                self.mode = 'shortBreak'
+        else:
+            self._notify("Break Over", "Time to focus!")
+            self._play_done_break()
+            self.mode = 'work'
+
+        self.time_left = self._get_current_duration()
+        self.total_time = self.time_left
+        self._update_ui()
+        self._update_control_states()
+
+        if self.auto_start.get():
+            self.root.after(1000, self._start)
+
+    def _switch_mode(self, mode):
+        if mode == self.mode and not self.running:
+            self._reset()
+            return
+        if self.running:
+            self._pause()
+        self.mode = mode
+        self.time_left = self._get_current_duration()
+        self.total_time = self.time_left
+        self._update_ui()
+        self._update_control_states()
+
+    def _get_current_duration(self):
+        key = {'work': 'work', 'shortBreak': 'shortBreak', 'longBreak': 'longBreak'}[self.mode]
+        return self.settings[key] * 60
+
+    # ============================================================
+    # 音效
+    # ============================================================
+    def _play_tick(self):
+        try:
+            import winsound
+            winsound.Beep(1200, 30)
+        except Exception:
+            pass
+
+    def _play_done_work(self):
+        try:
+            import winsound
+            winsound.Beep(523, 200)
+            self.root.after(150, lambda: winsound.Beep(659, 200))
+            self.root.after(300, lambda: winsound.Beep(784, 400))
+        except Exception:
+            pass
+
+    def _play_done_break(self):
+        try:
+            import winsound
+            winsound.Beep(392, 150)
+            self.root.after(120, lambda: winsound.Beep(523, 150))
+            self.root.after(240, lambda: winsound.Beep(659, 150))
+            self.root.after(360, lambda: winsound.Beep(784, 300))
+        except Exception:
+            pass
+
+    # ============================================================
+    # 通知
+    # ============================================================
+    def _notify(self, title, msg):
+        show_tray_balloon(self.tray_nid, title, msg)
+        self._update_tray_tip(f"{title} - {msg}")
+
+    def _update_tray_tip(self, tip):
+        if self.tray_nid is None:
+            return
+        try:
+            NIF_TIP = 0x4
+            NIM_MODIFY = 0x1
+            tip_bytes = tip.encode('utf-8')[:127]
+            ctypes.memmove(
+                ctypes.addressof(self.tray_nid) + 16,
+                tip_bytes + b'\x00',
+                len(tip_bytes) + 1
+            )
+            self.tray_nid.uFlags = NIF_TIP
+            ctypes.windll.shell32.Shell_NotifyIconW(NIM_MODIFY, ctypes.byref(self.tray_nid))
+        except Exception:
+            pass
+
+    # ============================================================
+    # UI 更新
+    # ============================================================
+    def _update_ui(self):
+        color_main = self.COLORS[self.mode]['main']
+        color_dim  = self.COLORS[self.mode]['dim']
+        label      = self.COLORS[self.mode]['label']
+
+        # 背景
+        self.root.configure(bg=C_BG)
+        self.main_frame.configure(bg=C_BG)
+        self.canvas.configure(bg=C_CANVAS_BG)
+        self.canvas.itemconfig(self.ring_bg_id, outline=C_RING_BG)
+
+        for widget in self.main_frame.winfo_children():
+            if isinstance(widget, tk.Frame) and widget not in (self.settings_frame,):
+                for sub in widget.winfo_children():
+                    if isinstance(sub, tk.Frame) and sub not in (self.settings_frame,):
+                        sub.configure(bg=C_BG)
+                if widget != self.settings_frame:
+                    widget.configure(bg=C_BG)
+
+        # 时间文字
+        mm, ss = divmod(self.time_left, 60)
+        time_str = f"{mm:02d}:{ss:02d}"
+        self.canvas.itemconfig(self.time_text, text=time_str)
+
+        if self.time_left <= 60 and self.time_left > 0 and self.mode == 'work':
+            self.canvas.itemconfig(self.time_text, fill=C_WORK)
+        else:
+            self.canvas.itemconfig(self.time_text, fill=C_TEXT)
+
+        self.canvas.itemconfig(self.mode_text, text=label, fill=C_TEXT_SUB)
+
+        # 进度弧
+        fraction = 1.0 - (self.time_left / self.total_time) if self.total_time > 0 else 0
+        self._draw_progress(fraction)
+
+        # 主按钮颜色
+        self.btn_main.configure(bg=color_main, activebackground=color_dim)
+        self.btn_reset.configure(bg=C_BTN_RESET_BG, fg=C_BTN_RESET_FG,
+                                  activebackground=C_BTN_RESET_HV, activeforeground=C_TEXT)
+        self.btn_skip.configure(bg=C_BTN_RESET_BG, fg=C_BTN_RESET_FG,
+                                 activebackground=C_BTN_RESET_HV, activeforeground=C_TEXT)
+
+        # 统计
+        self.pomo_label.config(text=str(self.pomo_count))
+        self.focus_label.config(text=self._format_focus_total())
+
+        # 托盘提示
+        if self.running:
+            self._update_tray_tip(f'{label} - {time_str}')
+
+    def _update_control_states(self):
+        if self.running:
+            self.btn_main.config(text="暂停")
+            self.btn_reset.config(state=tk.NORMAL)
+            self.btn_skip.config(state=tk.NORMAL)
+        else:
+            self.btn_main.config(text="开始")
+            at_start = self.time_left == self._get_current_duration()
+            self.btn_reset.config(state=tk.DISABLED if at_start else tk.NORMAL)
+            self.btn_skip.config(state=tk.NORMAL)
+
+        # 模式标签高亮
+        for btn, mk in [(self.btn_work, 'work'), (self.btn_short, 'shortBreak'), (self.btn_long, 'longBreak')]:
+            if mk == self.mode:
+                btn.state(['pressed'])
+            else:
+                btn.state(['!pressed'])
+
+        mm, ss = divmod(self.time_left, 60)
+        status = "Pause" if self.running else "Ready"
+        self.root.title(f'{status} - {mm:02d}:{ss:02d}')
+
+    def _format_focus_total(self):
+        if self.total_focus_min >= 60:
+            h = self.total_focus_min // 60
+            m = self.total_focus_min % 60
+            return f"{h}h{m}m" if m > 0 else f"{h}h"
+        return f"{self.total_focus_min}m"
+
+    def _apply_settings(self):
+        limits = {
+            'work': (1, 120), 'shortBreak': (1, 30),
+            'longBreak': (1, 60), 'longInterval': (2, 10)
+        }
+        for key, var in self.setting_vars.items():
+            val = var.get()
+            lo, hi = limits[key]
+            self.settings[key] = max(lo, min(hi, val if val else self.settings[key]))
+            var.set(self.settings[key])
+
+        self._save_settings()
+        if not self.running:
+            self._reset()
+
+    def run(self):
+        self.root.mainloop()
+
+
+def main():
+    app = PomodoroApp()
+    app.run()
+
+
+if __name__ == '__main__':
+    main()
