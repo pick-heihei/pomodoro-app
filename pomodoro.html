@@ -1,0 +1,1022 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🍅 番茄钟</title>
+<style>
+  :root {
+    --bg: #1a1b2e;
+    --card: #232440;
+    --work: #ff6b6b;
+    --work-glow: #ff6b6b44;
+    --short-break: #4ecdc4;
+    --short-break-glow: #4ecdc444;
+    --long-break: #45b7d1;
+    --long-break-glow: #45b7d144;
+    --text: #e8e8f0;
+    --sub: #9b9bb4;
+    --btn-bg: #2d2e50;
+    --btn-hover: #363760;
+    --ring-bg: #2a2b48;
+    --accent: var(--work);
+    --glow: var(--work-glow);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    user-select: none;
+    -webkit-user-select: none;
+    transition: background 0.6s;
+  }
+
+  .container {
+    text-align: center;
+    padding: 2rem;
+    max-width: 480px;
+    width: 100%;
+  }
+
+  /* 模式切换标签 */
+  .tabs {
+    display: flex;
+    background: var(--card);
+    border-radius: 16px;
+    padding: 5px;
+    margin-bottom: 2rem;
+    gap: 2px;
+  }
+
+  .tab {
+    flex: 1;
+    padding: 10px 8px;
+    border: none;
+    background: transparent;
+    color: var(--sub);
+    border-radius: 12px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+    transition: all 0.3s;
+    position: relative;
+  }
+
+  .tab.active {
+    background: var(--accent);
+    color: #fff;
+  }
+
+  .tab:hover:not(.active) {
+    color: var(--text);
+    background: var(--btn-bg);
+  }
+
+  /* 圆形进度环 */
+  .ring-container {
+    position: relative;
+    width: 300px;
+    height: 300px;
+    margin: 0 auto 2rem;
+  }
+
+  .ring-bg {
+    fill: none;
+    stroke: var(--ring-bg);
+    stroke-width: 10;
+  }
+
+  .ring-progress {
+    fill: none;
+    stroke: var(--accent);
+    stroke-width: 10;
+    stroke-linecap: round;
+    transform: rotate(-90deg);
+    transform-origin: center;
+    transition: stroke-dashoffset 1s linear, stroke 0.6s;
+    filter: drop-shadow(0 0 8px var(--glow));
+  }
+
+  .ring-svg {
+    width: 100%;
+    height: 100%;
+  }
+
+  .timer-content {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .time {
+    font-size: 4.5rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 2px;
+    line-height: 1;
+    color: var(--text);
+    transition: color 0.3s;
+  }
+
+  .time.warning {
+    color: var(--work);
+  }
+
+  .session-label {
+    font-size: 0.9rem;
+    color: var(--sub);
+    margin-top: 0.5rem;
+    letter-spacing: 1px;
+  }
+
+  /* 控制按钮 */
+  .controls {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .btn {
+    border: none;
+    cursor: pointer;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.25s;
+    outline: none;
+  }
+
+  .btn:active {
+    transform: scale(0.93);
+  }
+
+  .btn-main {
+    width: 72px;
+    height: 72px;
+    background: var(--accent);
+    color: #fff;
+    font-size: 1.6rem;
+    box-shadow: 0 6px 24px var(--glow);
+    transition: all 0.35s;
+  }
+
+  .btn-main:hover {
+    box-shadow: 0 8px 32px var(--glow);
+    transform: translateY(-2px);
+  }
+
+  .btn-main:active {
+    transform: scale(0.93) translateY(0);
+  }
+
+  .btn-sm {
+    width: 48px;
+    height: 48px;
+    background: var(--btn-bg);
+    color: var(--sub);
+    font-size: 1.1rem;
+  }
+
+  .btn-sm:hover {
+    background: var(--btn-hover);
+    color: var(--text);
+  }
+
+  .btn-sm:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+    pointer-events: none;
+  }
+
+  /* 会话统计 */
+  .stats {
+    display: flex;
+    justify-content: center;
+    gap: 2rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .stat {
+    text-align: center;
+  }
+
+  .stat-value {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--text);
+    line-height: 1;
+  }
+
+  .stat-label {
+    font-size: 0.75rem;
+    color: var(--sub);
+    margin-top: 4px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  /* 提示文字 */
+  .hint {
+    color: var(--sub);
+    font-size: 0.8rem;
+    opacity: 0.7;
+    transition: opacity 1s;
+  }
+
+  /* 设置面板 */
+  .settings-toggle {
+    background: none;
+    border: none;
+    color: var(--sub);
+    cursor: pointer;
+    font-size: 1.2rem;
+    padding: 8px;
+    border-radius: 8px;
+    transition: all 0.2s;
+  }
+
+  .settings-toggle:hover {
+    background: var(--btn-bg);
+    color: var(--text);
+  }
+
+  .settings {
+    display: none;
+    background: var(--card);
+    border-radius: 16px;
+    padding: 1.5rem;
+    margin-top: 1rem;
+    text-align: left;
+  }
+
+  .settings.open {
+    display: block;
+  }
+
+  .settings h3 {
+    font-size: 0.9rem;
+    color: var(--sub);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    margin-bottom: 1rem;
+  }
+
+  .setting-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--btn-bg);
+  }
+
+  .setting-row:last-child {
+    border-bottom: none;
+  }
+
+  .setting-label {
+    font-size: 0.9rem;
+    color: var(--text);
+  }
+
+  .setting-input {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .setting-input input {
+    width: 56px;
+    padding: 6px 8px;
+    border: 1px solid var(--btn-bg);
+    border-radius: 8px;
+    background: var(--btn-bg);
+    color: var(--text);
+    text-align: center;
+    font-size: 0.9rem;
+    font-weight: 600;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  .setting-input input:focus {
+    border-color: var(--accent);
+  }
+
+  .setting-input span {
+    color: var(--sub);
+    font-size: 0.8rem;
+  }
+
+  /* 通知 Toast */
+  .toast {
+    position: fixed;
+    top: 24px;
+    left: 50%;
+    transform: translateX(-50%) translateY(-120px);
+    background: var(--card);
+    color: var(--text);
+    padding: 14px 28px;
+    border-radius: 12px;
+    font-weight: 600;
+    font-size: 0.95rem;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+    transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    z-index: 100;
+    pointer-events: none;
+  }
+
+  .toast.show {
+    transform: translateX(-50%) translateY(0);
+  }
+
+  /* 任务列表 */
+  .task-section {
+    margin-bottom: 1.5rem;
+  }
+
+  .task-input-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  .task-input-row input {
+    flex: 1;
+    padding: 10px 14px;
+    border: 1px solid var(--btn-bg);
+    border-radius: 10px;
+    background: var(--card);
+    color: var(--text);
+    font-size: 0.9rem;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  .task-input-row input:focus {
+    border-color: var(--accent);
+  }
+
+  .task-input-row button {
+    padding: 10px 16px;
+    border: none;
+    background: var(--accent);
+    color: #fff;
+    border-radius: 10px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 0.85rem;
+    transition: all 0.2s;
+  }
+
+  .task-input-row button:hover {
+    opacity: 0.9;
+  }
+
+  .current-task {
+    font-size: 0.95rem;
+    color: var(--sub);
+    padding: 6px 0;
+    min-height: 1.5em;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+
+  .current-task .task-text {
+    color: var(--text);
+    font-weight: 500;
+  }
+
+  .current-task .clear-task {
+    background: none;
+    border: none;
+    color: var(--sub);
+    cursor: pointer;
+    font-size: 1rem;
+    padding: 2px 6px;
+    border-radius: 4px;
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+
+  .current-task:hover .clear-task {
+    opacity: 1;
+  }
+
+  .current-task .clear-task:hover {
+    color: var(--work);
+  }
+
+  /* 响应式 */
+  @media (max-width: 420px) {
+    .ring-container { width: 240px; height: 240px; }
+    .time { font-size: 3.2rem; }
+    .container { padding: 1rem; }
+    .tabs { margin-bottom: 1.5rem; }
+    .tab { font-size: 0.75rem; padding: 8px 4px; }
+    .stats { gap: 1.2rem; }
+    .stat-value { font-size: 1.5rem; }
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <!-- 模式切换 -->
+  <div class="tabs">
+    <button class="tab active" data-mode="work">🍅 专注</button>
+    <button class="tab" data-mode="shortBreak">☕ 短休息</button>
+    <button class="tab" data-mode="longBreak">🌴 长休息</button>
+  </div>
+
+  <!-- 圆形计时器 -->
+  <div class="ring-container" id="ringContainer">
+    <svg class="ring-svg" viewBox="0 0 300 300">
+      <circle class="ring-bg" cx="150" cy="150" r="135" />
+      <circle class="ring-progress" id="ringProgress" cx="150" cy="150" r="135"
+              stroke-dasharray="848.23" stroke-dashoffset="0" />
+    </svg>
+    <div class="timer-content">
+      <div class="time" id="timerDisplay">25:00</div>
+      <div class="session-label" id="sessionLabel">准备开始</div>
+    </div>
+  </div>
+
+  <!-- 当前任务 -->
+  <div class="task-section">
+    <div class="task-input-row">
+      <input type="text" id="taskInput" placeholder="当前在做什么？" maxlength="80" />
+      <button id="taskBtn">设定</button>
+    </div>
+    <div class="current-task" id="currentTask">
+      <span class="task-text"></span>
+      <button class="clear-task" id="clearTask" title="清除任务">✕</button>
+    </div>
+  </div>
+
+  <!-- 控制按钮 -->
+  <div class="controls">
+    <button class="btn btn-sm" id="btnReset" title="重置" disabled>↺</button>
+    <button class="btn btn-main" id="btnMain" title="开始">▶</button>
+    <button class="btn btn-sm" id="btnSkip" title="跳过" disabled>⏭</button>
+  </div>
+
+  <div class="hint" id="hint">点击 ▶ 开始专注</div>
+
+  <!-- 统计 -->
+  <div class="stats">
+    <div class="stat">
+      <div class="stat-value" id="pomoCount">0</div>
+      <div class="stat-label">完成番茄</div>
+    </div>
+    <div class="stat">
+      <div class="stat-value" id="totalFocus">0m</div>
+      <div class="stat-label">总专注时长</div>
+    </div>
+  </div>
+
+  <!-- 设置面板 -->
+  <button class="settings-toggle" id="settingsToggle" title="设置">⚙</button>
+  <div class="settings" id="settingsPanel">
+    <h3>时长设置（分钟）</h3>
+    <div class="setting-row">
+      <span class="setting-label">🍅 专注</span>
+      <div class="setting-input">
+        <input type="number" id="workDuration" value="25" min="1" max="120" />
+        <span>分钟</span>
+      </div>
+    </div>
+    <div class="setting-row">
+      <span class="setting-label">☕ 短休息</span>
+      <div class="setting-input">
+        <input type="number" id="shortBreakDuration" value="5" min="1" max="30" />
+        <span>分钟</span>
+      </div>
+    </div>
+    <div class="setting-row">
+      <span class="setting-label">🌴 长休息</span>
+      <div class="setting-input">
+        <input type="number" id="longBreakDuration" value="15" min="1" max="60" />
+        <span>分钟</span>
+      </div>
+    </div>
+    <div class="setting-row">
+      <span class="setting-label">🔄 长休息间隔</span>
+      <div class="setting-input">
+        <input type="number" id="longBreakInterval" value="4" min="2" max="10" />
+        <span>个番茄</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<!-- 音频（使用 Web Audio API 生成通知音） -->
+<script>
+  (function() {
+    // ==================== DOM 引用 ====================
+    const timerDisplay = document.getElementById('timerDisplay');
+    const sessionLabel = document.getElementById('sessionLabel');
+    const ringProgress = document.getElementById('ringProgress');
+    const btnMain = document.getElementById('btnMain');
+    const btnReset = document.getElementById('btnReset');
+    const btnSkip = document.getElementById('btnSkip');
+    const hint = document.getElementById('hint');
+    const toast = document.getElementById('toast');
+    const pomoCountEl = document.getElementById('pomoCount');
+    const totalFocusEl = document.getElementById('totalFocus');
+    const tabs = document.querySelectorAll('.tab');
+    const root = document.documentElement;
+    const settingsToggle = document.getElementById('settingsToggle');
+    const settingsPanel = document.getElementById('settingsPanel');
+    const taskInput = document.getElementById('taskInput');
+    const taskBtn = document.getElementById('taskBtn');
+    const currentTaskEl = document.getElementById('currentTask');
+    const clearTaskBtn = document.getElementById('clearTask');
+    const taskText = currentTaskEl.querySelector('.task-text');
+
+    // 设置输入
+    const workDurationInput = document.getElementById('workDuration');
+    const shortBreakDurationInput = document.getElementById('shortBreakDuration');
+    const longBreakDurationInput = document.getElementById('longBreakDuration');
+    const longBreakIntervalInput = document.getElementById('longBreakInterval');
+
+    // ==================== 常量 ====================
+    const CIRCUMFERENCE = 2 * Math.PI * 135; // r=135 => ~848.23
+
+    // ==================== 状态 ====================
+    const MODES = {
+      work: { label: '专注中…', icon: '🍅' },
+      shortBreak: { label: '休息一下', icon: '☕' },
+      longBreak: { label: '深度放松', icon: '🌴' },
+    };
+
+    let currentMode = 'work';
+    let timeRemaining = 25 * 60; // 秒
+    let totalTime = 25 * 60;
+    let timerInterval = null;
+    let pomoCount = 0;
+    let totalFocusMinutes = 0;
+    let currentTask = '';
+    let isRunning = false;
+
+    // 设置值
+    let settings = {
+      work: 25,
+      shortBreak: 5,
+      longBreak: 15,
+      longBreakInterval: 4,
+    };
+
+    // ==================== 音频引擎 ====================
+    let audioCtx = null;
+
+    function getAudioContext() {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      return audioCtx;
+    }
+
+    function playBeep(freq, duration, type = 'sine', vol = 0.3) {
+      try {
+        const ctx = getAudioContext();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, ctx.currentTime);
+        gain.gain.setValueAtTime(vol, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(ctx.currentTime);
+        osc.stop(ctx.currentTime + duration);
+      } catch (e) {
+        // 忽略音频错误
+      }
+    }
+
+    function playNotification(isWorkDone) {
+      if (isWorkDone) {
+        // 工作完成：欢快的三连音
+        setTimeout(() => playBeep(523, 0.2, 'sine', 0.35), 0);
+        setTimeout(() => playBeep(659, 0.2, 'sine', 0.35), 150);
+        setTimeout(() => playBeep(784, 0.4, 'sine', 0.35), 300);
+      } else {
+        // 休息结束：上升音
+        setTimeout(() => playBeep(392, 0.15, 'triangle', 0.3), 0);
+        setTimeout(() => playBeep(523, 0.15, 'triangle', 0.3), 120);
+        setTimeout(() => playBeep(659, 0.15, 'triangle', 0.3), 240);
+        setTimeout(() => playBeep(784, 0.3, 'triangle', 0.3), 360);
+      }
+    }
+
+    function playClick() {
+      playBeep(880, 0.06, 'sine', 0.15);
+    }
+
+    function playTick() {
+      playBeep(1200, 0.03, 'sine', 0.08);
+    }
+
+    // ==================== Toast ====================
+    let toastTimer = null;
+    function showToast(msg) {
+      toast.textContent = msg;
+      toast.classList.add('show');
+      if (toastTimer) clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => toast.classList.remove('show'), 2500);
+    }
+
+    // ==================== 更新 UI ====================
+    function formatTime(seconds) {
+      const m = Math.floor(seconds / 60);
+      const s = seconds % 60;
+      return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+    }
+
+    function updateDisplay() {
+      timerDisplay.textContent = formatTime(timeRemaining);
+      const progress = timeRemaining / totalTime;
+      ringProgress.style.strokeDashoffset = CIRCUMFERENCE * (1 - progress);
+
+      // 最后1分钟警告
+      if (timeRemaining <= 60 && timeRemaining > 0 && currentMode === 'work') {
+        timerDisplay.classList.add('warning');
+      } else {
+        timerDisplay.classList.remove('warning');
+      }
+    }
+
+    function updateColors() {
+      let colorVar, glowVar;
+      switch (currentMode) {
+        case 'work':
+          colorVar = 'var(--work)';
+          glowVar = 'var(--work-glow)';
+          break;
+        case 'shortBreak':
+          colorVar = 'var(--short-break)';
+          glowVar = 'var(--short-break-glow)';
+          break;
+        case 'longBreak':
+          colorVar = 'var(--long-break)';
+          glowVar = 'var(--long-break-glow)';
+          break;
+      }
+      root.style.setProperty('--accent', colorVar);
+      root.style.setProperty('--glow', glowVar);
+    }
+
+    function updateTabActive() {
+      tabs.forEach(t => {
+        t.classList.toggle('active', t.dataset.mode === currentMode);
+      });
+    }
+
+    function updateSessionLabel() {
+      sessionLabel.textContent = MODES[currentMode].label;
+    }
+
+    function updateButtonStates() {
+      if (isRunning) {
+        btnMain.innerHTML = '⏸';
+        btnMain.title = '暂停';
+        btnReset.disabled = false;
+        btnSkip.disabled = false;
+      } else {
+        btnMain.innerHTML = '▶';
+        btnMain.title = '开始';
+        btnReset.disabled = timeRemaining === totalTime;
+        btnSkip.disabled = false;
+      }
+    }
+
+    function updateHint() {
+      if (isRunning) {
+        hint.textContent = '专注中，别分心 ✨';
+      } else if (timeRemaining === totalTime) {
+        hint.textContent = '点击 ▶ 开始' + (currentMode === 'work' ? '专注' : '休息');
+      } else {
+        hint.textContent = '已暂停 — 点击 ▶ 继续';
+      }
+    }
+
+    function updateStats() {
+      pomoCountEl.textContent = pomoCount;
+      if (totalFocusMinutes >= 60) {
+        const h = Math.floor(totalFocusMinutes / 60);
+        const m = totalFocusMinutes % 60;
+        totalFocusEl.textContent = m > 0 ? `${h}h ${m}m` : `${h}h`;
+      } else {
+        totalFocusEl.textContent = `${totalFocusMinutes}m`;
+      }
+    }
+
+    function updateTaskDisplay() {
+      if (currentTask) {
+        taskText.textContent = '📌 ' + currentTask;
+        clearTaskBtn.style.display = 'inline-block';
+      } else {
+        taskText.textContent = '';
+        clearTaskBtn.style.display = 'none';
+      }
+    }
+
+    function setMode(mode) {
+      if (isRunning) return; // 运行时不允许切换
+      currentMode = mode;
+      timeRemaining = settings[mode === 'shortBreak' ? 'shortBreak' : mode === 'longBreak' ? 'longBreak' : 'work'] * 60;
+      totalTime = timeRemaining;
+      updateColors();
+      updateTabActive();
+      updateSessionLabel();
+      updateDisplay();
+      updateButtonStates();
+      updateHint();
+    }
+
+    function refreshAll() {
+      updateColors();
+      updateDisplay();
+      updateSessionLabel();
+      updateButtonStates();
+      updateHint();
+      updateStats();
+      updateTaskDisplay();
+      updateTabActive();
+    }
+
+    // ==================== 计时器控制 ====================
+    function startTimer() {
+      if (isRunning) return;
+      // 如果计时器已走完，重置到当前模式时长再开始
+      if (timeRemaining <= 0) {
+        timeRemaining = settings[currentMode === 'shortBreak' ? 'shortBreak' : currentMode === 'longBreak' ? 'longBreak' : 'work'] * 60;
+        totalTime = timeRemaining;
+        updateDisplay();
+      }
+
+      // 恢复音频上下文（某些浏览器暂停后需要）
+      if (audioCtx && audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+
+      isRunning = true;
+      playClick();
+      updateButtonStates();
+      updateHint();
+      updateTabActive(); // 确保标签正确
+
+      timerInterval = setInterval(() => {
+        timeRemaining--;
+
+        // 最后5秒滴答声
+        if (timeRemaining <= 5 && timeRemaining > 0 && currentMode === 'work') {
+          playTick();
+        }
+
+        updateDisplay();
+
+        if (timeRemaining <= 0) {
+          timerComplete();
+        }
+      }, 1000);
+    }
+
+    function pauseTimer() {
+      if (!isRunning) return;
+      isRunning = false;
+      clearInterval(timerInterval);
+      timerInterval = null;
+      playClick();
+      updateButtonStates();
+      updateHint();
+    }
+
+    function resetTimer() {
+      if (isRunning) {
+        clearInterval(timerInterval);
+        timerInterval = null;
+        isRunning = false;
+      }
+      timeRemaining = settings[currentMode === 'shortBreak' ? 'shortBreak' : currentMode === 'longBreak' ? 'longBreak' : 'work'] * 60;
+      totalTime = timeRemaining;
+      playClick();
+      refreshAll();
+    }
+
+    function skipTimer() {
+      if (isRunning) {
+        clearInterval(timerInterval);
+        timerInterval = null;
+        isRunning = false;
+      }
+      timeRemaining = 0;
+      updateDisplay();
+      timerComplete();
+    }
+
+    function timerComplete() {
+      clearInterval(timerInterval);
+      timerInterval = null;
+      isRunning = false;
+
+      if (currentMode === 'work') {
+        // 完成一个番茄
+        pomoCount++;
+        totalFocusMinutes += settings.work;
+        playNotification(true);
+        showToast(`🎉 番茄完成！已累积 ${pomoCount} 个番茄`);
+
+        // 决定下一个模式
+        if (pomoCount % settings.longBreakInterval === 0) {
+          currentMode = 'longBreak';
+          showToast('🌴 该来个长休息了！');
+        } else {
+          currentMode = 'shortBreak';
+        }
+      } else {
+        // 休息结束，回到工作
+        playNotification(false);
+        showToast('⏰ 休息结束，回到专注模式');
+        currentMode = 'work';
+      }
+
+      timeRemaining = settings[currentMode === 'shortBreak' ? 'shortBreak' : currentMode === 'longBreak' ? 'longBreak' : 'work'] * 60;
+      totalTime = timeRemaining;
+
+      refreshAll();
+
+      // 自动开始下一轮
+      setTimeout(() => {
+        startTimer();
+      }, 800);
+    }
+
+    // ==================== 事件绑定 ====================
+    btnMain.addEventListener('click', () => {
+      if (isRunning) {
+        pauseTimer();
+      } else {
+        startTimer();
+      }
+    });
+
+    btnReset.addEventListener('click', resetTimer);
+    btnSkip.addEventListener('click', skipTimer);
+
+    tabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        if (isRunning) {
+          showToast('请先暂停再切换模式');
+          return;
+        }
+        setMode(tab.dataset.mode);
+      });
+    });
+
+    // 键盘快捷键
+    document.addEventListener('keydown', (e) => {
+      if (e.target.tagName === 'INPUT') return; // 不在输入框中响应
+
+      switch (e.code) {
+        case 'Space':
+          e.preventDefault();
+          if (isRunning) {
+            pauseTimer();
+          } else {
+            startTimer();
+          }
+          break;
+        case 'KeyR':
+          if (!e.ctrlKey && !e.metaKey) {
+            resetTimer();
+          }
+          break;
+        case 'KeyS':
+          if (!e.ctrlKey && !e.metaKey) {
+            skipTimer();
+          }
+          break;
+        case 'Digit1':
+          if (!e.ctrlKey && !e.metaKey && !isRunning) setMode('work');
+          break;
+        case 'Digit2':
+          if (!e.ctrlKey && !e.metaKey && !isRunning) setMode('shortBreak');
+          break;
+        case 'Digit3':
+          if (!e.ctrlKey && !e.metaKey && !isRunning) setMode('longBreak');
+          break;
+      }
+    });
+
+    // 设置面板
+    settingsToggle.addEventListener('click', () => {
+      settingsPanel.classList.toggle('open');
+      settingsToggle.textContent = settingsPanel.classList.contains('open') ? '✕' : '⚙';
+    });
+
+    // 设置变更
+    function applySettings() {
+      settings.work = Math.max(1, Math.min(120, parseInt(workDurationInput.value) || 25));
+      settings.shortBreak = Math.max(1, Math.min(30, parseInt(shortBreakDurationInput.value) || 5));
+      settings.longBreak = Math.max(1, Math.min(60, parseInt(longBreakDurationInput.value) || 15));
+      settings.longBreakInterval = Math.max(2, Math.min(10, parseInt(longBreakIntervalInput.value) || 4));
+
+      // 同步 input 显示值
+      workDurationInput.value = settings.work;
+      shortBreakDurationInput.value = settings.shortBreak;
+      longBreakDurationInput.value = settings.longBreak;
+      longBreakIntervalInput.value = settings.longBreakInterval;
+
+      if (!isRunning) {
+        setMode(currentMode);
+      }
+
+      showToast('✅ 设置已更新');
+    }
+
+    [workDurationInput, shortBreakDurationInput, longBreakDurationInput, longBreakIntervalInput].forEach(input => {
+      input.addEventListener('change', applySettings);
+      input.addEventListener('blur', applySettings);
+    });
+
+    // 任务管理
+    taskBtn.addEventListener('click', () => {
+      const val = taskInput.value.trim();
+      if (val) {
+        currentTask = val;
+        taskInput.value = '';
+        updateTaskDisplay();
+        showToast('📌 当前任务已设定');
+      }
+    });
+
+    taskInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        taskBtn.click();
+      }
+    });
+
+    clearTaskBtn.addEventListener('click', () => {
+      currentTask = '';
+      updateTaskDisplay();
+    });
+
+    // ==================== 初始化 ====================
+    function init() {
+      ringProgress.style.strokeDasharray = CIRCUMFERENCE;
+      ringProgress.style.strokeDashoffset = '0';
+      setMode('work');
+      updateStats();
+      updateTaskDisplay();
+
+      // 页面标题
+      document.title = '🍅 番茄钟';
+    }
+
+    init();
+
+    // 页面可见性变化时更新标题
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden && isRunning) {
+        document.title = `${formatTime(timeRemaining)} - 🍅 专注中`;
+      } else if (!document.hidden) {
+        document.title = '🍅 番茄钟';
+      }
+    });
+
+    // 定时更新标题（在后台标签中显示时间）
+    setInterval(() => {
+      if (document.hidden && isRunning) {
+        document.title = `${formatTime(timeRemaining)} - 🍅 专注中`;
+      }
+    }, 2000);
+
+    console.log('🍅 番茄钟已就绪');
+    console.log('  空格键 = 开始/暂停');
+    console.log('  R = 重置 | S = 跳过');
+    console.log('  1 = 专注 | 2 = 短休息 | 3 = 长休息');
+  })();
+</script>
+
+</body>
+</html>
